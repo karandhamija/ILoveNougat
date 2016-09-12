@@ -1,6 +1,8 @@
 package app.zappos.karandhamija.ilovenougat;
 
 import android.content.Context;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
 import android.os.Bundle;
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -43,6 +45,9 @@ public class MainActivity extends AppCompatActivity {
     private MyRecyclerAdapter myRecyclerAdapter;
     FloatingActionButton fabSearch, fabClose;
     String mTextString = null;
+    String mCompareProductID = null;
+    String mCompareStyleID = null;
+    String mCompareColorID = null;
 
     public static final String ZAPPOS_API_URL= "https://api.zappos.com/Search?term=";
 
@@ -98,15 +103,20 @@ public class MainActivity extends AppCompatActivity {
                 EditText mtext = (EditText) findViewById(R.id.searchText);
                 Editable mString = mtext.getText();
                 if(!mString.toString().isEmpty()){
-                    mTextString = mString.toString().trim();
-                    mTextString = mTextString.replaceAll(" ", "%20");
-                    String serverURL = ZAPPOS_API_URL + mTextString + ZAPPOS_PRODUCT_KEY;
-                    InputMethodManager imm = (InputMethodManager)getSystemService(Context.INPUT_METHOD_SERVICE);
-                    imm.hideSoftInputFromWindow(arg0.getWindowToken(), 0);
-                    new GetProductTask().execute(serverURL);
+                    if(isNetworkAvailable()){
+                        mTextString = mString.toString().trim();
+                        mTextString = mTextString.replaceAll(" ", "%20");
+                        String serverURL = ZAPPOS_API_URL + mTextString + ZAPPOS_PRODUCT_KEY;
+                        InputMethodManager imm = (InputMethodManager)getSystemService(Context.INPUT_METHOD_SERVICE);
+                        imm.hideSoftInputFromWindow(arg0.getWindowToken(), 0);
+                        new GetProductTask().execute(serverURL);
+                    }
+                    else {
+                        Toast.makeText(MainActivity.this, "Please check your internet connection", Toast.LENGTH_SHORT).show();
+                    }
                 }
                 else {
-                    Toast.makeText(MainActivity.this, "Please input the text correctly", Toast.LENGTH_LONG).show();
+                    Toast.makeText(MainActivity.this, "Please input the text correctly", Toast.LENGTH_SHORT).show();
                 }
 
             }
@@ -125,6 +135,7 @@ public class MainActivity extends AppCompatActivity {
             mGetProductDialog = new ProgressDialog(MainActivity.this);
             if(mGetProductDialog != null && !mGetProductDialog.isShowing()){
                 mGetProductDialog.setMessage("Please wait..");
+                mGetProductDialog.setCanceledOnTouchOutside(false);
                 mGetProductDialog.show();
             }
 
@@ -150,8 +161,10 @@ public class MainActivity extends AppCompatActivity {
             if (mError != null) {
 
 
-            } else {
+            }
 
+            if(mContent != null)
+            {
                 JSONObject jsonResponse;
 
                 try {
@@ -182,7 +195,7 @@ public class MainActivity extends AppCompatActivity {
                         }
                     }
                     else{
-                        Toast.makeText(MainActivity.this, " No product found! Please check some other product.", Toast.LENGTH_LONG).show();
+                        Toast.makeText(MainActivity.this, " No product found! Please check some other product.", Toast.LENGTH_SHORT).show();
                     }
 
 
@@ -193,6 +206,9 @@ public class MainActivity extends AppCompatActivity {
                 }
             displayList();
 
+            }
+            else {
+                Toast.makeText(MainActivity.this, "Error getting the result from the Zappos.com", Toast.LENGTH_SHORT).show();
             }
         }
 
@@ -206,9 +222,16 @@ public class MainActivity extends AppCompatActivity {
             myRecyclerAdapter = new MyRecyclerAdapter(MainActivity.this, mProjectObjectList, new OnClickListener() {
                 @Override
                 public void onClick(View v) {
-                    TextView mTextView = (TextView) v.findViewById(R.id.productUrl);
-                    String serverURL = PM6_API_URL + mTextString + PM6_PRODUCT_KEY;
-                    new CompareProductTask().execute(serverURL);
+                    if(isNetworkAvailable()){
+                        mCompareColorID = ((TextView)v.findViewById(R.id.colorId)).getText().toString();
+                        mCompareProductID = ((TextView)v.findViewById(R.id.productId)).getText().toString();
+                        mCompareStyleID = ((TextView)v.findViewById(R.id.styleId)).getText().toString();
+                        String serverURL = PM6_API_URL + mTextString + PM6_PRODUCT_KEY;
+                        new CompareProductTask().execute(serverURL);
+                    }
+                    else {
+                        Toast.makeText(MainActivity.this, "Please check your internet connection", Toast.LENGTH_SHORT).show();
+                    }
                 }
             });
 
@@ -280,6 +303,7 @@ public class MainActivity extends AppCompatActivity {
             mCompareProductDialog = new ProgressDialog(MainActivity.this);
             if(mCompareProductDialog != null && !mCompareProductDialog.isShowing()){
                 mCompareProductDialog.setMessage("Comparing Product on 6pm..");
+                mCompareProductDialog.setCanceledOnTouchOutside(false);
                 mCompareProductDialog.show();
             }
 
@@ -294,38 +318,73 @@ public class MainActivity extends AppCompatActivity {
 
         protected void onPostExecute(Void unused) {
 
-            if(mProjectObjectList != null){
-                mProjectObjectList.clear();
-            }
-
-            if(mCompareProductDialog != null && mCompareProductDialog.isShowing()){
-                mCompareProductDialog.dismiss();
-            }
-
             if (mError != null) {
 
 
             }
-        }
 
-        private void displayList(){
-            LinearLayoutManager llm = new LinearLayoutManager(MainActivity.this);
-            llm.setOrientation(LinearLayoutManager.VERTICAL);
-            recyclerView.setLayoutManager(llm);
+            boolean productFound = false;
+            System.out.println("Inside onPostExecute ");
+            if(mContent != null)
+            {
+                System.out.println("Inside onPostExecute and mContent != null");
+                JSONObject jsonResponse;
+
+                try {
+
+                    jsonResponse = new JSONObject(mContent);
+
+                    JSONArray jsonMainNode = jsonResponse.optJSONArray("results");
+
+                    int lengthJsonArr = jsonMainNode.length();
+                    if(lengthJsonArr != 0){
+                        for(int i=0; i < lengthJsonArr; i++)
+                        {
+                            System.out.println("Inside onPostExecute comparing products ");
+                            JSONObject jsonChildNode = jsonMainNode.getJSONObject(i);
+                            String productID = jsonChildNode.optString("productId").toString();
+                            String styleID = jsonChildNode.optString("styleId").toString();
+                            String colorID = jsonChildNode.optString("colorId").toString();
+
+                            if(productID.equalsIgnoreCase(mCompareProductID) && styleID.equalsIgnoreCase(mCompareStyleID)
+                                    && colorID.equalsIgnoreCase(mCompareColorID)){
+
+                                productFound = true;
+                                break;
+                            }
+
+                        }
+                    }
+
+                    if(mCompareProductDialog != null && mCompareProductDialog.isShowing()){
+                        mCompareProductDialog.dismiss();
+                    }
+
+                    if(productFound){
+                        Toast.makeText(MainActivity.this, " Similar product found on 6PM !!", Toast.LENGTH_SHORT).show();
+                    }
+                    else {
+                        Toast.makeText(MainActivity.this, " No product found on 6PM", Toast.LENGTH_SHORT).show();
+                    }
 
 
-            Log.d("karan","Display The List"+mProjectObjectList.size());
-            myRecyclerAdapter = new MyRecyclerAdapter(MainActivity.this, mProjectObjectList, new OnClickListener() {
-                @Override
-                public void onClick(View v) {
-                    TextView mTextView = (TextView) v.findViewById(R.id.productUrl);
-                    System.out.println("Name is " + mTextView.getText());
+                } catch (JSONException e) {
+
+                    e.printStackTrace();
                 }
-            });
 
-            recyclerView.setAdapter(myRecyclerAdapter);
+            }
+            else {
+
+                if(mCompareProductDialog != null && mCompareProductDialog.isShowing()){
+                    mCompareProductDialog.dismiss();
+                }
+
+                Toast.makeText(MainActivity.this, "Error getting the result from the 6PM", Toast.LENGTH_SHORT).show();
+            }
 
         }
+
         public String requestContent(String url) {
             HttpClient httpclient = new DefaultHttpClient();
             String result = null;
@@ -391,4 +450,10 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    private boolean isNetworkAvailable() {
+        ConnectivityManager connectivityManager
+                = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+        NetworkInfo activeNetworkInfo = connectivityManager.getActiveNetworkInfo();
+        return activeNetworkInfo != null && activeNetworkInfo.isConnected();
+    }
 }
