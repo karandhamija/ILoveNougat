@@ -29,7 +29,6 @@ public class MyRecyclerAdapter extends RecyclerView.Adapter<MyRecyclerAdapter.Cu
     @Override
     public CustomViewHolder onCreateViewHolder(ViewGroup viewGroup, int i) {
 
-        Log.d("karan","Inside the onCreatViewHolder");
         View view = LayoutInflater.from(viewGroup.getContext()).inflate(R.layout.simple_list, null);
 
         view.setOnClickListener(listener);
